@@ -176,6 +176,17 @@
   .r-code  { font-size: 14px; font-weight: 800; color: var(--t1); letter-spacing: .3px; }
   .r-color { font-size: 11px; color: var(--t4); margin-top: 2px; font-weight: 500; }
 
+  /* 단품명 툴팁 (JS로 위치 제어 — fixed) */
+  #g-tip {
+    position: fixed;
+    background: rgba(24,38,58,0.92); color: #fff;
+    font-size: 11px; font-weight: 500; letter-spacing: .3px;
+    white-space: nowrap; padding: 4px 8px; border-radius: 4px;
+    pointer-events: none; opacity: 0; transition: opacity .15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 300;
+  }
+
   .r-lbl { font-size: 10px; color: var(--t4); letter-spacing: 1px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px; }
   .r-val { font-size: 17px; font-weight: 800; color: var(--t2); font-family: 'Consolas','Courier New',monospace; }
 
@@ -326,6 +337,7 @@
 </style>
 </head>
 <body>
+<div id="g-tip"></div>
 
 <header>
   <div class="logo">
@@ -637,7 +649,7 @@ function buildRow(it,open){
   row.innerHTML=`
     <div class="row-hd" onclick="toggleRow('${k}',this)">
       <div>
-        <div class="r-code">${it.code}</div>
+        <div class="r-code"${it.명칭?` data-tip="${trimName(it.명칭)}"`:''}>${it.code}</div>
         ${it.color?`<div class="r-color">${it.color}</div>`:''}
       </div>
       <div><div class="r-lbl">현재고</div><div class="r-val">${it.현재고.toLocaleString()}</div></div>
@@ -1088,6 +1100,21 @@ const uz=document.getElementById('upload-zone');
 uz.addEventListener('dragover', e=>{ e.preventDefault(); uz.classList.add('drag'); });
 uz.addEventListener('dragleave', ()=>uz.classList.remove('drag'));
 uz.addEventListener('drop', e=>{ e.preventDefault(); uz.classList.remove('drag'); doFile(e.dataTransfer.files[0]); });
+
+// 단품명 툴팁
+const gTip = document.getElementById('g-tip');
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest('.r-code[data-tip]');
+  if(!el) return;
+  const r = el.getBoundingClientRect();
+  gTip.textContent = el.dataset.tip;
+  gTip.style.left = r.left + 'px';
+  gTip.style.top  = (r.top - 30) + 'px';
+  gTip.style.opacity = '1';
+});
+document.addEventListener('mouseout', e => {
+  if(e.target.closest('.r-code[data-tip]')) gTip.style.opacity = '0';
+});
 </script>
 </body>
 </html>
