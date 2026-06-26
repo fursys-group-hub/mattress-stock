@@ -209,6 +209,23 @@
     white-space: nowrap; text-overflow: clip;
     font-family: 'Consolas','Courier New',monospace;
   }
+  .hm-lbl.sat { color: var(--blu); }
+  .hm-lbl.sun { color: var(--red-m); }
+
+  /* 기간 선택 */
+  .days-wrap { position: relative; }
+  .days-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0;
+    background: white; border: 1px solid var(--bd); border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12); z-index: 200; overflow: hidden;
+  }
+  .days-panel.open { display: block; }
+  .days-opt {
+    padding: 7px 20px; font-size: 12px; color: var(--t2); cursor: pointer;
+    white-space: nowrap; transition: background .1s;
+  }
+  .days-opt:hover  { background: var(--blu-l); color: var(--blu); }
+  .days-opt.active { background: var(--blu-l); color: var(--blu); font-weight: 700; }
 
   .hm {
     width: 28px; height: 26px; border-radius: 4px;
@@ -265,6 +282,8 @@
   .card.imp { border-top-color: var(--grn);  background: #f5fdf8; }
 
   .c-date { font-size: 11px; color: var(--t3); font-weight: 600; letter-spacing: 1px; margin-bottom: 5px; font-family: 'Consolas','Courier New',monospace; }
+  .c-date.sat { color: var(--blu); }
+  .c-date.sun { color: var(--red-m); }
   .c-vals { display: flex; align-items: baseline; gap: 6px; margin-bottom: 10px; }
   .c-orig { font-size: 12px; color: var(--t4); text-decoration: line-through; font-family: 'Consolas','Courier New',monospace; }
   .c-val  { font-size: 26px; font-weight: 900; line-height: 1; font-family: 'Consolas','Courier New',monospace; transition: color .2s; }
@@ -352,7 +371,17 @@
   <div class="hd-stats" id="hd-stats" style="display:none">
     <div class="hd-stat"><div class="hd-stat-n" id="st-total">—</div><div class="hd-stat-l">분석 품목</div></div>
     <div class="hd-stat"><div class="hd-stat-n" id="st-lack" style="color:var(--red)">—</div><div class="hd-stat-l">부족 발생</div></div>
-    <div class="hd-stat"><div class="hd-stat-n" id="st-days" style="color:var(--amb)">—</div><div class="hd-stat-l">분석 날짜</div></div>
+    <div class="hd-stat days-wrap" onclick="toggleDaysPanel()" style="cursor:pointer;" title="클릭하여 분석 기간 변경">
+      <div class="hd-stat-n" id="st-days" style="color:var(--amb)">—</div>
+      <div class="hd-stat-l">분석 날짜 ▾</div>
+      <div class="days-panel" id="days-panel">
+        <div class="days-opt" onclick="setDays(7,event)">7일</div>
+        <div class="days-opt active" onclick="setDays(10,event)">10일</div>
+        <div class="days-opt" onclick="setDays(14,event)">14일</div>
+        <div class="days-opt" onclick="setDays(21,event)">21일</div>
+        <div class="days-opt" onclick="setDays(30,event)">30일</div>
+      </div>
+    </div>
   </div>
   <div class="hd-right" id="hd-right" style="display:none">
     <button class="btn-reset" onclick="doReset()">↺ 새 파일</button>
@@ -428,7 +457,9 @@
 let D = null;
 let sort = 'date';
 let extras = {};
-let activeLines = new Set(); // 활성 포장라인 필터
+let activeLines = new Set();
+let viewDays = 10;
+let lastWb = null;
 
 const isDate = v => v && /^\d{4}-\d{2}-\d{2}$/.test(String(v));
 const fmt    = d => { const p=d.split('-'); return p[1]+'/'+p[2]; };
@@ -450,7 +481,7 @@ function parse(ws) {
   const dg=[];
   for(let c=0;c<=mC;c++){ const v=cell(0,c); if(isDate(v)) dg.push({date:String(v),sc:c}); }
   dg.sort((a,b)=>a.date.localeCompare(b.date));
-  const vg=dg.filter(d=>!d.date.startsWith('2025')).slice(0,10);
+  const vg=dg.filter(d=>!d.date.startsWith('2025')).slice(0,viewDays);
   if(!vg.length) return {err:'날짜 헤더를 찾을 수 없습니다.'};
   const grps=vg.map((g,i)=>{
     const sm={}, end=i+1<vg.length?vg[i+1].sc:g.sc+7;
@@ -500,6 +531,7 @@ function doFile(f) {
     try {
       const buf=await f.arrayBuffer();
       const wb=XLSX.read(new Uint8Array(buf),{type:'array',cellDates:false});
+      lastWb=wb;
       const res=parse(wb.Sheets[wb.SheetNames[0]]);
       if(res.err){alert('오류: '+res.err);resetUp();return;}
       D=res; extras={};
@@ -576,6 +608,32 @@ function doReset(){
   resetUp();
 }
 
+const dayClass = d => { const dw=new Date(d).getDay(); return dw===6?'sat':dw===0?'sun':''; };
+
+function toggleDaysPanel(){
+  document.getElementById('days-panel').classList.toggle('open');
+}
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.days-wrap')){
+    document.getElementById('days-panel').classList.remove('open');
+  }
+});
+function setDays(n,e){
+  if(e) e.stopPropagation();
+  viewDays=n;
+  document.getElementById('st-days').textContent=n+'일';
+  document.querySelectorAll('.days-opt').forEach(el=>el.classList.toggle('active', el.textContent===n+'일'));
+  document.getElementById('days-panel').classList.remove('open');
+  if(!lastWb) return;
+  const res=parse(lastWb.Sheets[lastWb.SheetNames[0]]);
+  if(res.err) return;
+  D=res; extras={};
+  document.getElementById('st-lack').textContent=D.items.length.toLocaleString();
+  const md=document.getElementById('meta-dates');
+  if(md && D.dates.length) md.textContent=fmt(D.dates[0])+' ~ '+fmt(D.dates[D.dates.length-1])+' ('+D.dates.length+'일)';
+  render();
+}
+
 function setSort(m){
   sort=m;
   document.getElementById('sb-date').classList.toggle('on',m==='date');
@@ -622,7 +680,7 @@ function buildRow(it,open){
   const origSh =new Set(baseTL.filter(t=>t.예량<0).map(t=>t.date));
 
   // 히트맵: 날짜 라벨 행 + 셀 행
-  const lblRow = D.dates.map(d=>`<div class="hm-lbl">${fmt(d)}</div>`).join('');
+  const lblRow = D.dates.map(d=>`<div class="hm-lbl${dayClass(d)?' '+dayClass(d):''}">${fmt(d)}</div>`).join('');
   const cellRow = D.dates.map(d=>{
     const isSh=shSet.has(d), was=origSh.has(d), res=was&&!isSh&&simOn, bon=Number(ex[d])>0;
     let cls='hm';
@@ -690,7 +748,7 @@ function appendDetail(row,it,k){
     let cc='card'; if(isSh)cc+=' sh'; else if(changed)cc+=' imp';
     let vc='c-val'; if(isSh)vc+=' sh'; else if(changed)vc+=' imp'; else vc+=' nm';
     return `<div class="${cc}" data-date="${date}">
-      <div class="c-date">${date}</div>
+      <div class="c-date${dayClass(date)?' '+dayClass(date):''}">${date}</div>
       <div class="c-vals">
         ${changed?`<span class="c-orig">${orig.toLocaleString()}</span>`:''}
         <span class="${vc}">${예량.toLocaleString()}</span>
@@ -877,7 +935,7 @@ function updateHeader(row, it, k, baseTL, simTL, actTL, simOn){
   const lblRow  = row.querySelector('.hmap-label');
   const cellRow = row.querySelector('.hmap-cells');
   if(lblRow && cellRow){
-    lblRow.innerHTML  = D.dates.map(d=>`<div class="hm-lbl">${fmt(d)}</div>`).join('');
+    lblRow.innerHTML  = D.dates.map(d=>`<div class="hm-lbl${dayClass(d)?' '+dayClass(d):''}">${fmt(d)}</div>`).join('');
     cellRow.innerHTML = D.dates.map(d=>{
       const isSh = shSet.has(d), was = origSh.has(d), res = was && !isSh && simOn, bon = Number(ex[d]) > 0;
       let cls = 'hm' + (res ? ' rv' : isSh ? ' sh' : ' ok');
